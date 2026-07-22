@@ -1,0 +1,104 @@
+# 02 - SOC-SIEM and Wazuh Installation
+
+## Objective
+
+Deploy a Wazuh SIEM server to collect, analyze, and alert on security events from homelab endpoints.
+
+## VM Specifications
+
+| Setting | Value |
+|---|---|
+| Name | SOC-SIEM |
+| RAM | 4096 MB |
+| CPU | 2 cores |
+| Disk | 70 GB |
+| Network | Shared Network |
+| Hostname | soc-siem |
+
+## Ubuntu Server Installation
+
+1. Boot from Ubuntu Server ARM64 ISO
+2. Select English language
+3. Choose keyboard layout
+4. Select Ubuntu Server installation type
+5. Set network to DHCP automatically
+6. Set hostname: `soc-siem`
+7. Create username and password
+8. Enable OpenSSH server
+9. Use entire virtual disk, no LVM
+10. Complete installation and reboot
+
+## Network Verification
+
+After first boot, verify connectivity:
+
+```bash
+ip addr
+ping -c 4 8.8.8.8
+```
+
+Expected result: IP address assigned, ping succeeds.
+
+## Package Update Troubleshooting
+
+During installation, Ubuntu archive mirror connections over HTTP failed.
+
+**Fix applied:** Changed package sources to HTTPS after installation:
+
+```bash
+sudo sed -i 's|http://|https://|g' /etc/apt/sources.list
+sudo sed -i 's|http://|https://|g' /etc/apt/sources.list.d/*.sources
+sudo apt clean
+sudo apt update
+sudo apt upgrade -y
+```
+
+## Wazuh Installation
+
+Install basic tools:
+
+```bash
+sudo apt install -y curl wget git unzip net-tools htop vim ufw
+```
+
+Download and run Wazuh installer:
+
+```bash
+cd ~
+curl -O https://packages.wazuh.com/4.x/wazuh-install.sh
+sudo bash ./wazuh-install.sh -a
+```
+
+**Important:** Save the dashboard credentials displayed at installation completion.
+
+## Dashboard Access
+
+From macOS host browser:
+
+```text
+https://192.168.64.9
+```
+
+Accept the self-signed certificate warning.
+
+## Verification
+
+| Check | Method |
+|---|---|
+| Wazuh manager running | `sudo systemctl status wazuh-manager` |
+| Wazuh indexer running | `sudo systemctl status wazuh-indexer` |
+| Wazuh dashboard running | `sudo systemctl status wazuh-dashboard` |
+| Dashboard accessible | Browser login successful |
+
+## Troubleshooting
+
+| Problem | Solution |
+|---|---|
+| Certificate warning | Normal for lab; accept and proceed |
+| Installer script not found | Re-run curl download command |
+| Service fails to start | Check disk space with `df -h` |
+
+## Screenshot Evidence
+
+![Wazuh dashboard login](screenshots/wazuh-dashboard-login.png)
+![Wazuh agents page](screenshots/wazuh-dashboard.png)
