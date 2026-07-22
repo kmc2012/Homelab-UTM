@@ -1,0 +1,13 @@
+# Lab 1 - Wazuh Agent Onboarding
+
+## Objective
+
+Deploy the Wazuh agent to a Linux endpoint and confirm log collection.
+
+## Result
+
+The Linux endpoint successfully appeared in the Wazuh dashboard as an active agent.
+
+## Evidence
+
+screenshot: wazuh-agent-active.png
