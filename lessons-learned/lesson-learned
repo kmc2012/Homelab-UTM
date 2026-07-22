@@ -1,0 +1,179 @@
+# Lessons Learned and Troubleshooting
+
+## UTM on Apple Silicon
+
+### Virtualize vs. Emulate
+
+| Mode | Speed | Compatibility | Use Case |
+|---|---|---|---|
+| Virtualize | Fast | ARM64 guests only | Ubuntu ARM64, Windows ARM64 |
+| Emulate | Slow | x86 guests possible | pfSense, Windows x86 (not recommended) |
+
+**Lesson:** Always use Virtualize with ARM64 images on M1 Macs.
+
+### Network Troubleshooting
+
+| Problem | Solution |
+|---|---|
+| VM has no IP | Confirm Shared Network mode, restart VM |
+| Can ping 8.8.8.8 but not google.com | DNS issue; check /etc/resolv.conf |
+| Cannot reach Ubuntu mirrors | Switch to HTTPS sources, try different network |
+
+## Ubuntu Package Management
+
+### HTTP Mirror Failures
+
+**Symptom:** `apt update` fails with connection errors to archive.ubuntu.com
+
+**Fix:**
+
+```bash
+sudo sed -i 's|http://|https://|g' /etc/apt/sources.list
+sudo sed -i 's|http://|https://|g' /etc/apt/sources.list.d/*.sources
+sudo apt clean
+sudo apt update
+```
+
+### Disk Space Warnings
+
+**Symptom:** Installations fail, services won't start
+
+**Check:**
+
+```bash
+df -h
+```
+
+**Wazuh minimum:** 60 GB recommended for SOC-SIEM VM
+
+## Windows Endpoint Specific
+
+### Windows ARM Image Won't Boot
+
+**Symptom:** Black screen or boot loop after import
+
+**Solutions:**
+- Use the UTM Windows installer wizard (downloads correct image)
+- Ensure you imported a VHDX, not an ISO, for ARM Windows
+- Allocate at least 2 GB RAM and 2 CPU cores
+
+### Wazuh Agent Not Connecting on Windows
+
+**Checklist:**
+
+```powershell
+# Verify service running
+Get-Service WazuhSvc
+
+# Check manager IP in config
+notepad "C:\Program Files (x86)\ossec-agent\ossec.conf"
+
+# Test connectivity to SIEM
+Test-NetConnection -ComputerName 192.168.64.5 -Port 1514
+
+# Restart agent
+Restart-Service WazuhSvc
+```
+
+### Sysmon Not Collecting Events
+
+**Symptom:** No Sysmon events in Wazuh
+
+**Fix:**
+
+```powershell
+# Verify Sysmon running
+Get-Service Sysmon64
+
+# Check Sysmon log
+Get-EventLog -LogName "Microsoft-Windows-Sysmon/Operational" -Newest 5
+
+# Reinstall if needed
+.\sysmon64.exe -u
+.\sysmon64.exe -accepteula -i sysmonconfig.xml
+```
+
+### PowerShell Logs Not in Wazuh
+
+**Symptom:** PowerShell commands execute but no alerts
+
+**Fix:**
+1. Open `gpedit.msc`
+2. Enable Script Block Logging, Module Logging, and Transcription
+3. Run `gpupdate /force`
+4. Restart Wazuh service: `Restart-Service WazuhSvc`
+
+### Windows VM Slow Performance
+
+| Action | Impact |
+|---|---|
+| Reduce RAM to 2 GB | Significant improvement |
+| Disable Windows visual effects | Moderate improvement |
+| Shut down Linux-Endpoint | Frees 1-1.5 GB |
+| Disable Windows Defender real-time (lab only) | Large improvement but disables IR-009 |
+
+## Wazuh Specific
+
+### Dashboard Certificate Warning
+
+**Symptom:** Browser shows certificate error
+
+**Solution:** Normal for lab environments. Accept the self-signed certificate and proceed.
+
+### Agent Not Appearing
+
+| Check | Linux Command | Windows Command |
+|---|---|---|
+| Agent service running? | `sudo systemctl status wazuh-agent` | `Get-Service WazuhSvc` |
+| Correct manager IP? | Check `/var/ossec/etc/ossec.conf` | Check `ossec.conf` in Program Files |
+| Firewall blocking? | Check UFW on SIEM | Check Windows Firewall |
+| Network reachable? | `ping SOC-SIEM-IP` | `ping SOC-SIEM-IP` |
+| Port 1514 open on SIEM? | `sudo ufw allow 1514` | N/A (SIEM-side) |
+
+### Wazuh Install Script Missing
+
+**Symptom:** `No such file or directory` when running installer
+
+**Fix:**
+
+```bash
+cd ~
+curl -O https://packages.wazuh.com/4.x/wazuh-install.sh
+ls -lh wazuh-install.sh
+sudo bash ./wazuh-install.sh -a
+```
+
+## Resource Management on 8 GB RAM
+
+### Running Combination Guide
+
+| Scenario | VMs to Run | Total RAM Used |
+|---|---|---|
+| Wazuh setup | SOC-SIEM only | 4 GB |
+| Linux attack lab | SOC-SIEM + Linux + Attacker | 6-7 GB |
+| Windows attack lab | SOC-SIEM + Windows + Attacker | 7-8 GB |
+| Cross-platform review | SOC-SIEM + Linux + Windows | 7-8 GB (very tight) |
+
+**Lesson:** Run only ONE endpoint platform (Linux OR Windows) alongside the SIEM and attacker at a time.
+
+## GitHub Portfolio Tips
+
+### What Makes a Strong Entry
+
+| Element | Why It Helps |
+|---|---|
+| Specific commands | Proves hands-on experience |
+| Screenshot evidence | Visual proof of work |
+| Honest troubleshooting | Shows problem-solving |
+| Clean formatting | Demonstrates communication |
+| Consistent structure | Easy for reviewers to navigate |
+| Both Linux and Windows detections | Demonstrates cross-platform skills |
+
+### What to Update Regularly
+
+- [ ] Replace placeholder IPs with your actual lab IPs
+- [ ] Add real screenshots from your Wazuh dashboard
+- [ ] Fill in actual CVEs from vulnerability scans
+- [ ] Update timestamps with real lab session times
+- [ ] Add new labs as you complete them
+- [ ] Document Windows-specific findings (Sysmon, PowerShell, Defender)
