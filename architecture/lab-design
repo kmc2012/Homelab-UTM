@@ -1,0 +1,112 @@
+# Lab Architecture
+
+## Network Diagram
+
+```
++-------------------------------------------------------------------------+
+|                          macOS Host (MacBook Air M1)                    |
+|                                                                         |
+|   ┌─────────────┐                                                       |
+|   │   Browser   │                                                       |
+|   └──────┬──────┘                                                       |
+|          │ HTTPS                                                        |
+|          ▼                                                              |
+|   ┌─────────────────────────────────────────────────────────────────┐   |
+|   │                     UTM Shared Network                         │   |
+|   │                      192.168.64.0/24                           │   |
+|   │                                                                 │   |
+|   │   +-----------------+     +-----------------+                  │   |
+|   │   │    SOC-SIEM     │     │ Linux-Endpoint  │                  │   |
+|   │   │  192.168.64.9   │◄───►│  192.168.64.14  │                  │   |
+|   │   │  Wazuh Server   │     │  SSH / UFW / FIM│                  │   |
+|   │   └────────▲────────┘     └─────────────────┘                  │   |
+|   │            │                                                     │   |
+|   │            │ Wazuh Agent (Port 1514)                             │   |
+|   │            │                                                     │   |
+|   │   +────────┴────────┐         +-----------------+              │   |
+|   │   │ Windows-Endpoint │         │  Attacker-Box   │              │   |
+|   │   │  192.168.64.15   │◄───────►│  192.168.64.12  │              │   |
+|   │   │ RDP / Sysmon     │         │  nmap / hydra   │              │   |
+|   │   │ Defender / PS    │         │  curl / nc      │              │   |
+|   │   └──────────────────┘         └─────────────────┘              │   |
+|   │                                                                 │   |
+|   └─────────────────────────────────────────────────────────────────┘   |
++-------------------------------------------------------------------------+
+```
+
+## Traffic Flow
+
+| Direction | Protocol | Purpose |
+|-----------|----------|---------|
+| Attacker-Box → Linux-Endpoint | SSH | Brute-force simulation |
+| Attacker-Box → Windows-Endpoint | RDP | Brute-force simulation |
+| Attacker-Box → Either endpoint | TCP various | Port scanning |
+| Linux-Endpoint → SOC-SIEM | Wazuh agent (1514) | Log collection |
+| Windows-Endpoint → SOC-SIEM | Wazuh agent (1514) | Log collection |
+| macOS → SOC-SIEM | HTTPS 443 | Dashboard access |
+
+## Data Collection Points
+
+| VM | Data Source | Collected By |
+|---|---|---|
+| Linux-Endpoint | /var/log/auth.log | Wazuh agent |
+| Linux-Endpoint | /var/log/ufw.log | Wazuh agent |
+| Linux-Endpoint | /etc/passwd, /etc/shadow | Wazuh FIM |
+| Linux-Endpoint | /opt/important/* | Wazuh FIM |
+| Windows-Endpoint | Security Event ID 4625, 4624 | Wazuh agent (eventchannel) |
+| Windows-Endpoint | PowerShell Event ID 4104 | Wazuh agent |
+| Windows-Endpoint | Sysmon Event ID 1, 3 | Wazuh agent |
+| Windows-Endpoint | Defender Operational log | Wazuh agent |
+| SOC-SIEM | All agent events | Wazuh indexer |
+| SOC-SIEM | Alert rules | Wazuh manager |
+
+## Resource Allocation (8 GB RAM Mac)
+
+| Running Scenario | VMs Active | Total RAM | Notes |
+|---|---|---|---|
+| Wazuh setup | SOC-SIEM only | 4 GB | Comfortable |
+| Linux testing | SOC-SIEM + Linux-Endpoint | 5-5.5 GB | Comfortable |
+| Linux attack simulation | SOC-SIEM + Linux + Attacker | 6-7 GB | Near limit |
+| Windows testing | SOC-SIEM + Windows-Endpoint | 6-7 GB | Close other apps |
+| Windows attack simulation | SOC-SIEM + Windows + Attacker | 7-8 GB | Tight; close everything else |
+| Cross-platform | SOC-SIEM + Linux + Windows | 7-8 GB | Very tight; avoid |
+
+**Rule:** Never run Linux-Endpoint and Windows-Endpoint at the same time as the Attacker-Box. Pick one platform per session.
+
+## Storage Layout (External 200 GB)
+
+```
+ExternalDrive/
+└── SOC-L1-Homelab/
+    ├── VMs/
+    │   ├── SOC-SIEM.utm/
+    │   ├── Linux-Endpoint.utm/
+    │   ├── Windows-Endpoint.utm/
+    │   └── Attacker-Box.utm/
+    ├── ISOs/
+    │   ├── ubuntu-server-arm64.iso
+    │   └── windows-11-arm64.vhdx
+    ├── Snapshots/
+    ├── Logs/
+    └── GitHub-Portfolio/
+        └── soc-l1-homelab-utm-m1/
+```
+
+## Security Boundaries
+
+| Boundary | Control |
+|----------|---------|
+| Lab ↔ Internet | UTM Shared NAT; limited outbound |
+| Attacker ↔ Targets | Allowed; this is the test traffic |
+| SIEM ↔ Endpoints | Agent authentication; encrypted agent communication |
+| Host ↔ VMs | Browser HTTPS only; no VM file sharing |
+| Windows RDP | Disabled externally in production; RDP exposed only inside lab |
+
+## Scaling Considerations
+
+| If you add... | Impact | Mitigation |
+|---------------|--------|------------|
+| Second Linux endpoint | +1 GB RAM | Only for specific multi-target scenarios |
+| pfSense later | Requires emulation; very slow | Not recommended on this hardware |
+| Additional SIEM | Wazuh is already heavy | Do not run Splunk or Elastic alongside |
+| More Windows endpoints | +2-3 GB each | Test one at a time; shut down others |
