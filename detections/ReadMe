@@ -1,0 +1,49 @@
+# Detections
+
+Reusable Wazuh custom rules and a tiny test harness. Each rule lives in its
+own file with a header comment containing:
+
+- Rule ID
+- ATT&CK technique(s)
+- Author + date
+- False-positive notes
+- Reference
+
+## Layout
+
+```
+detections/
+├── README.md
+├── local_rules.xml         ← combined ruleset ready to drop into Wazuh
+└── tests/
+    └── README.md           ← how to replay attacks against a rule
+```
+
+## Authoring rule
+
+A new rule must include a `<mitre>` block and a header comment:
+
+```xml
+<!--
+  id:    100101
+  att&ck: T1548.003 Sudoers modification
+  author: <you> 2026-07-26
+  fp:     none observed during lab 04 testing
+  ref:    labs/lab-04-detection-engineering
+-->
+<rule id="100101" level="12">
+  ...
+</rule>
+```
+
+## Deploy
+
+```bash
+sudo cp local_rules.xml /var/ossec/etc/rules/
+sudo systemctl restart wazuh-manager
+```
+
+## Tests
+
+For each rule, record the Atomic Red Team / custom command that triggers it
+under `tests/` so a reviewer can reproduce the alert.
