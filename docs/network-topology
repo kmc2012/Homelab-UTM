@@ -1,0 +1,50 @@
+# Network Topology
+
+## IP plan
+
+| Host             | IP             | Role                       | Notes                          |
+|------------------|----------------|----------------------------|--------------------------------|
+| labnet gateway   | 192.168.64.1   | UTM host-only gateway      | UTM-internal, not a VM         |
+| SOC-SIEM         | 192.168.64.9   | Wazuh indexer/server/UI    | 1514/udp in, 9200/tcp, 443/tcp |
+| Linux Endpoint   | 192.168.64.14  | Target + agent             | 22/tcp, 80/tcp                 |
+| Attacker         | 192.168.64.12  | Offensive tooling          | outbound only                  |
+| Windows Endpoint | 192.168.64.16  | Target + agent + Sysmon    | 445/tcp, 3389/tcp optional     |
+
+## Ports of interest
+
+- **1514/udp** — Wazuh agent → server (event traffic).
+- **1515/tcp** — Wazuh agent enrollment.
+- **55000/tcp** — Wazuh server → indexer (internal).
+- **9200/tcp** — Wazuh indexer REST.
+- **443/tcp** — Wazuh dashboard.
+
+## Traffic matrix
+
+```
+Source              Destination         Protocol   Purpose
+─────────────────────────────────────────────────────────────
+Linux Endpoint      SOC-SIEM            1514/udp   agent events
+Windows Endpoint    SOC-SIEM            1514/udp   agent + Sysmon events
+Attacker            Linux Endpoint      any        recon + exploitation
+Attacker            Windows Endpoint    any        recon + exploitation
+SOC-SIEM            (host browser)      443/tcp    analyst UI
+```
+
+## Diagram
+
+```mermaid
+flowchart TB
+    GW["labnet gateway\n192.168.64.1"]
+    SOC["SOC-SIEM (Wazuh)\n192.168.64.9"]
+    LIN["Linux Endpoint\n192.168.64.14"]
+    WIN["Windows Endpoint\n192.168.64.16"]
+    ATK["Attacker\n192.168.64.12"]
+    GW --- SOC
+    GW --- LIN
+    GW --- WIN
+    GW --- ATK
+    LIN -- 1514/udp --> SOC
+    WIN -- 1514/udp --> SOC
+    ATK --> LIN
+    ATK --> WIN
+```
