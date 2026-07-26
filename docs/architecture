@@ -1,0 +1,56 @@
+# Architecture & Design Rationale
+
+## Host
+
+- **Hardware:** MacBook Air 2020, Apple M1, 8 GB unified RAM, 8-core CPU,
+  512 GB internal SSD.
+- **External storage:** 1 TB external drive with a dedicated 200 GB partition
+  used to store UTM VM bundles and ISO images, freeing host SSD space.
+
+## Hypervisor
+
+- **UTM** — open-source QEMU/KVM front-end for Apple Silicon. Chosen because
+  it supports both ARM and emulated x86_64 guests and offers the isolated
+  virtual network needed for a safe lab.
+
+## Network
+
+- A single isolated host-only network: **192.168.64.0/24**.
+- UTM assigns this range automatically when the VMs share one virtual switch.
+- No NAT/bridged adapter is required for the lab exercises; outbound internet
+  for package installs is provided through UTM's default NAT interface, kept
+  separate from the lab subnet so attacker traffic cannot leave the host.
+
+## Virtual machines
+
+### 1. SOC-SIEM (192.168.64.9)
+Runs the **Wazuh all-in-one** stack: indexer, server, and dashboard. Acts as
+the collection point, detection engine, and UI for the other VMs.
+
+### 2. Linux Endpoint (192.168.64.14)
+Simulated employee workstation/server. Runs the Wazuh agent, audit daemon,
+and a few intentionally vulnerable services (SSH, web server) to generate
+telemetry and act as an attack target.
+
+### 3. Windows Endpoint (192.168.64.16)
+Simulated Windows 11 workstation. Runs the Wazuh agent + Sysmon with a
+config that surfaces process, network, and image-load events.
+
+### 4. Attacker (192.168.64.12)
+Hardened minimal Ubuntu used to launch controlled attacks against the two
+endpoints. Tools installed on demand (nmap, hydra, mimicry of common TTPs).
+
+## Data flow
+
+1. Endpoints run Wazuh agent → forward to SOC-SIEM (1514/udp by default).
+2. Windows endpoint also streams Sysmon events through the agent.
+3. SOC-SIEM indexes events, evaluates rules, raises alerts in the dashboard.
+4. Attacker VM generates the malicious traffic the SIEM is meant to detect.
+
+## Constraints & trade-offs
+
+- 8 GB host RAM is the main bottleneck; not all four VMs run comfortably at
+  once. Recommended session pattern: SOC-SIEM + one endpoint + attacker.
+- Emulated x86_4 performance on M1 is fine for Wazuh at this scale, but
+  expect slow Windows boot the first time.
+- No domain controller in scope — adds RAM cost beyond the host's budget.
