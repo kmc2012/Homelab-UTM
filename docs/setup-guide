@@ -1,0 +1,118 @@
+# Build Guide — Step by Step
+
+> Follow in order. Each section ends with a checkpoint you should verify
+> before moving on.
+
+## 0. Prerequisites
+
+- macOS host with at least 40 GB free on the internal SSD.
+- 1 TB external drive (or any large external disk) for ISOs and VM bundles.
+- ISOs ready to mount:
+  - Ubuntu Server 22.04 LTS (ARM64 build for M1).
+  - Ubuntu Desktop 22.04 LTS (ARM64) — optional, for a GUI attacker box.
+  - Windows 11 ARM64 VHDX/ISO (use the Windows 11 ARM preview or UUP dump).
+- Wazuh install bundle (offline packages if the host has no internet during
+  install).
+
+## 1. Prepare the host
+
+1. Format the external drive as APFS and create a 200 GB partition named
+   `HomelabVMs`. Move UTM's VM storage there in UTM → Settings → Storage.
+2. Download all ISOs to `/Volumes/HomelabVMs/ISOs/`.
+3. Install UTM from https://mac.getutm.app or `brew install --cask utm`.
+
+## 2. Create the shared lab network
+
+1. In UTM, open **Settings → Network**.
+2. Add a **Host-Only** network named `labnet` with subnet `192.168.64.0/24`.
+3. Note the gateway (typically `192.168.64.1`) — this becomes the default
+   route inside each VM.
+
+## 3. Build SOC-SIEM (192.168.64.9)
+
+1. UTM → New VM → Virtualize → Linux → select Ubuntu Server ARM64 ISO.
+2. Resources: **4 GB RAM, 2 vCPU, 70 GB disk** (qcow2 on the external drive).
+3. Network: attach to `labnet` only.
+4. Boot, install Ubuntu Server (minimal, no extras).
+5. Set static IP:
+   ```bash
+   sudo nano /etc/netplan/01-netcfg.yaml
+   # network: { version: 2, ethernets: { ens0: { dhcp4: no,
+   #   addresses: [192.168.64.9/24], gateway4: 192.168.64.1,
+   #   nameservers: { addresses: [1.1.1.1] } } } }
+   sudo netplan apply
+   ```
+6. Install Wazuh all-in-one (indexer + server + dashboard):
+   ```bash
+   curl -sO https://packages.wazuh.com/4.x/wazuh-install.sh
+   sudo bash wazuh-install.sh --all-in-one
+   ```
+   Save the printed admin password.
+7. **Checkpoint:** from the host browser, open `https://192.168.64.9` and
+   log in with `admin` and the password from step 6.
+
+## 4. Build Linux Endpoint (192.168.64.14)
+
+1. UTM → New VM → Ubuntu Server ARM64 ISO.
+2. Resources: **1 GB RAM, 1 vCPU, 25 GB disk**.
+3. Network: `labnet` only.
+4. Install minimal Ubuntu, set static IP `192.168.64.14` (same netplan shape).
+5. Install the Wazuh agent:
+   ```bash
+   curl -sO https://packages.wazuh.com/4.x/wazuh-agent.sh
+   sudo WAZUH_MANAGER="192.168.64.9" bash wazuh-agent.sh
+   sudo systemctl enable --now wazuh-agent
+   ```
+6. Enable audit for file integrity + command logging:
+   ```bash
+   sudo apt install -y auditd
+   sudo auditctl -e 1 -f 1
+   ```
+7. Install a small target service (e.g. `apache2` + weak SSH password) to
+   be used in Lab 03.
+8. **Checkpoint:** in Wazuh dashboard → Agents, the Linux endpoint appears
+   as `Active`.
+
+## 5. Build Windows Endpoint (192.168.64.16)
+
+1. UTM → New VM → Virtualize → Windows → select the Windows 11 ARM image.
+2. Resources: **3 GB RAM, 2 vCPU, 60 GB disk**.
+3. Network: `labnet` only.
+4. Complete Windows setup; set static IP `192.168.64.16` via
+   Settings → Network → IPv4 manual.
+5. Install **Sysmon** with a community config (e.g. SwiftOnSecurity):
+   ```powershell
+   sysmon -accepteula -i sysmonconfig.xml
+   ```
+6. Install the Wazuh agent MSI from the dashboard → Add Agent, using
+   `WAZUH_MANAGER="192.168.64.9"`.
+7. Edit `C:\\ProgramData\\ossec/etc/ossec.conf` to ship the
+   `Microsoft-Windows-Sysmon/Operational` channel.
+8. Restart the agent service.
+9. **Checkpoint:** Sysmon event ID 1 (process create) appears in the Wazuh
+   Discover tab when you launch a process on the Windows box.
+
+## 6. Build Attacker (192.168.64.12)
+
+1. UTM → New VM → Ubuntu Server ARM64 ISO.
+2. Resources: **1.5 GB RAM, 1 vCPU, 30 GB disk**.
+3. Network: `labnet` only.
+4. Install minimal Ubuntu, set static IP `192.168.64.12`.
+5. Install baseline tooling:
+   ```bash
+   sudo apt install -y nmap hydra curl git python3-pip tcpdump
+   ```
+6. Add additional tooling per lab as needed (e.g. Atomic Red Team clone for
+   Lab 03).
+7. **Checkpoint:** `nmap -sS 192.168.64.14` from the attacker returns
+   open ports on the Linux endpoint.
+
+## 7. Snapshot
+
+In UTM, take a snapshot of each VM named `baseline-v1`. Return to this
+snapshot before each lab to keep results reproducible.
+
+## Done
+
+You should now have four VMs on `192.168.64.0/24`, all reporting into the
+Wazuh dashboard at `192.168.64.9`. Move on to `labs/lab-01-soc-siem-deploy`.
