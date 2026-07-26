@@ -1,98 +1,95 @@
 # SOC L1 Homelab Using UTM on Apple Silicon
 
-## Overview
+## Wazuh-based Detection & Response
 
-This project documents a lightweight SOC L1 homelab built on a MacBook Air M1 using UTM. The lab simulates common day-to-day SOC analyst tasks, including alert triage, endpoint monitoring, brute-force investigation, file integrity monitoring, firewall response, vulnerability review, and incident documentation.
+A personal cybersecurity home lab built on a single MacBook Air (M1) running
+`UTM` as the hypervisor. The lab simulates a small enterprise environment
+with endpoints, a SIEM (Wazuh), and an isolated attacker box, and is used to
+practice detection engineering, threat hunting, and incident response.
 
-## Hardware
+> Live documentation, lab write-ups, and detection artifacts are versioned here
+> to demonstrate hands-on capability to recruiters and reviewers.
 
-| Component | Specification |
-|---|---|
-| Host | MacBook Air M1 |
-| RAM | 8 GB |
-| Internal storage | 512 GB |
-| External lab partition | 200 GB |
-| Hypervisor | UTM |
+## Architecture at a glance
 
-## Lab Architecture
+```mermaid
+flowchart LR
+    subgraph Host["Host: MacBook Air M1 · UTM · 192.168.64.0/24"]
+        EP["Linux Endpoint\nUbuntu · 192.168.64.14"]
+        WIN["Windows Endpoint\nWin 11 · 192.168.64.16"]
+        ATK["Attacker\nUbuntu · 192.168.64.12"]
+        SOC["Wazuh SIEM\nUbuntu · 192.168.64.9"]
+    end
+    EP -- syscheck + authd --> SOC
+    WIN -- Sysmon + agent --> SOC
+    ATK -- attacks --> EP
+    ATK -- attacks --> WIN
+```
 
-| VM | Purpose |
-|---|---|
-| SOC-SIEM | Wazuh manager and dashboard |
-| Linux-Endpoint | Monitored Linux endpoint |
-| Windows-Endpoint | Monitored Windows endpoint with Sysmon |
-| Attacker-Box | Attack simulation machine |
+## Repository contents
 
-See [architecture/lab-design.md](architecture/lab-design.md) and [architecture/network-diagram.md](architecture/network-diagram.md) for full diagrams.
+```
+homelab/
+├── README.md                  ← you are here
+├── docs/
+│   ├── architecture.md        ← host/hypervisor/network design + rationale
+│   ├── setup-guide.md         ← step-by-step build instructions
+│   └── network-topology.md    ← IP plan, ports, data flow
+├── labs/
+│   ├── lab-01-soc-siem-deploy/README.md
+│   ├── lab-02-log-onboarding/README.md
+│   ├── lab-03-attack-detection/README.md
+│   ├── lab-04-detection-engineering/README.md
+│   ├── lab-05-threat-hunting/README.md
+│   └── lab-06-incident-response/README.md
+└── detections/
+    └── README.md              ← how custom rules are stored and tested
+```
 
-## Skills Demonstrated
+## Host & VM inventory
 
-- SIEM deployment and agent onboarding
-- Linux endpoint monitoring
-- Windows endpoint monitoring with Sysmon
-- SSH brute-force triage
-- RDP brute-force triage
-- Port scan investigation
-- File integrity monitoring
-- Suspicious PowerShell analysis
-- Windows Defender alert handling
-- Linux account monitoring
-- Firewall containment with UFW
-- Vulnerability review
-- Phishing analysis
-- Incident report writing
+| Component       | OS / Software      | RAM      | vCPU | Disk      | IP            |
+|-----------------|--------------------|----------|------|-----------|---------------|
+| Host            | macOS (M1)         | 8 GB     | 8    | 512 GB    | —             |
+| External drive  | —                  | —        | —    | 1 TB (200 GB partition) | —             |
+| SOC-SIEM        | Ubuntu + Wazuh     | 4 GB     | 2    | 60–80 GB  | 192.168.64.9  |
+| Linux Endpoint  | Ubuntu Server      | 1 GB     | 1    | 20–30 GB  | 192.168.64.14 |
+| Windows Endpoint| Windows 11         | 2–3 GB   | 2    | 50–60 GB  | 192.168.64.16 |
+| Attacker        | Ubuntu Server      | 1–2 GB   | 1    | 25–40 GB  | 192.168.64.12 |
 
-## Lab Network
+> **Memory note:** the host has 8 GB of unified RAM and the four VMs request
+> up to ~10 GB combined. Run the heavy SOC-SIEM VM together with one endpoint
+> at a time, or accept macOS swapping during simultaneous runs.
 
-All VMs use UTM Shared Network on 192.168.64.0/24.
+## Lab series (portfolio)
 
-## Projects
+| #  | Lab                       | Skill demonstrated                            |
+|----|---------------------------|-----------------------------------------------|
+| 01 | SOC-SIEM Deploy           | Wazuh manager + dashboard installation       |
+| 02 | Log Onboarding            | Agent enroll, Sysmon, Linux audit, journald   |
+| 03 | Attack Detection          | Simulated attacks → SIEM alerts               |
+| 04 | Detection Engineering     | Custom rules + MITRE ATT&CK mapping           |
+| 05 | Threat Hunting            | Hypothesis-driven hunts across endpoints      |
+| 06 | Incident Response         | Containment, eradication, lessons-learned     |
 
-### Setup Guides
+Each `labs/lab-XX-*` folder contains its own README with objectives, steps,
+expected outcomes, and the artifacts you should commit.
 
-| Guide | Description |
-|---|---|
-| [01-utm-setup](setup-guides/01-utm-setup.md) | UTM install and VM creation |
-| [02-soc-siem-wazuh](setup-guides/02-soc-siem-wazuh.md) | Wazuh SIEM deployment |
-| [03-linux-endpoint](setup-guides/03-linux-endpoint.md) | Linux endpoint and agent |
-| [04-attacker-box](setup-guides/04-attacker-box.md) | Attacker simulation VM |
-| [05-windows-endpoint](setup-guides/05-windows-endpoint.md) | Windows endpoint with Sysmon |
+## How to use this repo
 
-### Detections
+1. Follow `docs/setup-guide.md` to build the four VMs in UTM.
+2. Walk the labs in order — each builds on the previous one.
+3. Commit artifacts (custom rules, hunt notes, IR reports) to the matching
+   `labs/` subfolder.
+4. Keep `detections/` for reusable Wazuh rule XML and a short test harness.
 
-| Detection | Source |
-|---|---|
-| [SSH Brute-Force](detections/ssh-bruteforce.md) | Linux auth logs |
-| [Port Scan](detections/port-scan.md) | Network activity |
-| [File Integrity Monitoring](detections/file-integrity-monitoring.md) | Wazuh FIM |
-| [Suspicious User Creation](detections/suspicious-user-creation.md) | Linux account logs |
-| [Malware Test File (EICAR)](detections/malware-test-eicar.md) | ClamAV / Defender |
-| [Suspicious PowerShell](detections/powershell-suspicious.md) | PowerShell Event ID 4104 |
-| [RDP Brute-Force](detections/rdp-bruteforce.md) | Windows Security Event ID 4625 |
-| [Windows Defender Alerts](detections/windows-defender.md) | Defender Operational log |
+## Authoring conventions
 
-### Incident Reports
+- Markdown for everything; Mermaid for diagrams (renders natively on GitHub).
+- One lab per folder; never delete a finished lab — append `-v2` for reruns.
+- Cite MITRE techniques as `TXXXX` with a link the first time in each doc.
+- Redact any real data; this is a lab, but treat outputs like real evidence.
 
-| Report | Description |
-|---|---|
-| [IR-001](incident-reports/IR-001-ssh-bruteforce.md) | SSH brute-force investigation |
-| [IR-002](incident-reports/IR-002-port-scan.md) | Port scan investigation |
-| [IR-003](incident-reports/IR-003-firewall-containment.md) | UFW containment response |
-| [IR-004](incident-reports/IR-004-suspicious-user.md) | Suspicious user creation |
-| [IR-005](incident-reports/IR-005-file-modification.md) | File modification investigation |
-| [IR-006](incident-reports/IR-006-eicar-test.md) | EICAR test on Linux |
-| [IR-007](incident-reports/IR-007-rdp-bruteforce.md) | RDP brute-force investigation |
-| [IR-008](incident-reports/IR-008-powershell.md) | Suspicious PowerShell investigation |
-| [IR-009](incident-reports/IR-009-defender-alert.md) | Windows Defender alert response |
-
-### Other Sections
-
-| Section | Description |
-|---|---|
-| [Vulnerability Management](vulnerability-management/linux-vulnerability-review.md) | CVE review and patching |
-| [Phishing Analysis](phishing-analysis/sample-001.md) | Email triage example |
-| [Capstone](capstone/full-investigation.md) | Multi-stage investigation |
-| [Lessons Learned](lessons-learned/troubleshooting.md) | Troubleshooting notes |
 
 ## Disclaimer
 
